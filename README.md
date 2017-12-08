@@ -304,6 +304,7 @@ The following changes must be applied to the original configuration file in orde
 {
     "save_process": "HeadersParser|Debugger|Hasher|Header|GUIDFilter|MySql",
     "guid_filter_lookup_table":"pings",
+    "guid_filter_lookup_field":"guid",
     ...
 }
 
