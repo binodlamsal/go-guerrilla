@@ -9,10 +9,11 @@ import (
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/go-sql-driver/mysql"
 
-	"github.com/flashmob/go-guerrilla/response"
 	"math/big"
 	"net"
 	"runtime/debug"
+
+	"github.com/flashmob/go-guerrilla/response"
 )
 
 // ----------------------------------------------------------------------------------
@@ -198,6 +199,11 @@ func MySql() Decorator {
 		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 
 			if task == TaskSaveMail {
+				// if ignore is set it means this email should not be stored
+				if _, ok := e.Values["ignore"]; ok {
+					return p.Process(e, task)
+				}
+
 				var to, body string
 
 				hash := ""

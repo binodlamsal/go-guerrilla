@@ -291,3 +291,21 @@ Thanks to:
 * https://github.com/Xeoncross
 
 ... and anyone else who opened an issue / sent a PR / gave suggestions!
+
+P.S. Notes for EveryCloud
+=========================
+
+The following changes must be applied to the original configuration file in order to activate custom functionality:
+
+```json
+...
+
+"backend_config":
+{
+    "save_process": "HeadersParser|Debugger|Hasher|Header|GUIDFilter|MySql",
+    "guid_filter_lookup_table":"pings",
+    ...
+}
+
+...
+```
