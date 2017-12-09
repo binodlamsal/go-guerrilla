@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"database/sql"
 	"errors"
+	"io/ioutil"
 	netmail "net/mail"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/flashmob/go-guerrilla/mail"
@@ -138,7 +140,13 @@ func GUIDFilter() Decorator {
 						if err != nil {
 							Log().WithError(err).Error("Could not prepare update statement")
 						} else {
-							_, err := stmt.Exec(delay, e.DeliveryHeader, e.Data.String(), time.Now(), 1, guid)
+							header, body, err := parseHeaderAndBody(e.String())
+
+							if err != nil {
+								Log().WithError(err).Error("Could not parse header and body of email")
+							}
+
+							_, err = stmt.Exec(delay, header, body, time.Now(), 1, guid)
 
 							if err != nil {
 								Log().WithError(err).Error("Could not update delay")
@@ -222,4 +230,27 @@ func calculateDelay(times timestamps) (delay int) {
 	first := times[0]
 	last := times[len(times)-1]
 	return int(last.Sub(first).Seconds())
+}
+
+func parseHeaderAndBody(message string) (header, body string, err error) {
+	m, err := netmail.ReadMessage(strings.NewReader(message))
+
+	if err != nil {
+		return
+	}
+
+	bodyBytes, err := ioutil.ReadAll(m.Body)
+
+	if err != nil {
+		return
+	}
+
+	body = string(bodyBytes)
+	matches := regexp.MustCompile("(?s)^(.+?)\n\n").FindStringSubmatch(message)
+
+	if matches != nil && len(matches) >= 2 {
+		header = matches[1]
+	}
+
+	return
 }
