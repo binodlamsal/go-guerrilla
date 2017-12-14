@@ -453,10 +453,12 @@ func (server *server) handleClient(client *client) {
 				client.kill()
 
 			case strings.Index(cmd, "DATA") == 0:
-				if client.MailFrom.IsEmpty() {
-					client.sendResponse(response.Canned.FailNoSenderDataCmd)
-					break
-				}
+				// !!! Temporarily disabled for compatibility with bounce messages !!!
+				// if client.MailFrom.IsEmpty() {
+				// 	client.sendResponse(response.Canned.FailNoSenderDataCmd)
+				// 	break
+				// }
+				// !!! Temporarily disabled for compatibility with bounce messages !!!
 				if len(client.RcptTo) == 0 {
 					client.sendResponse(response.Canned.FailNoRecipientsDataCmd)
 					break

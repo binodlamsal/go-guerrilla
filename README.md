@@ -302,11 +302,18 @@ The following changes must be applied to the original configuration file in orde
 
 "backend_config":
 {
-    "save_process": "HeadersParser|Debugger|Hasher|Header|GUIDFilter|MySql",
-    "guid_filter_lookup_table":"pings",
-    "guid_filter_lookup_field":"guid",
+    "save_process": "HeadersParser|Debugger|Hasher|Header|MySql",
+    "mysql_mail_table":"pings",
+    "mysql_guid_lookup_table":"custom_mailflow_logs",
+    "mysql_bounce_address":"bounce@test1.everycloudtech.com",
     ...
 }
 
 ...
 ```
+
+Please keep in mind that the default MySQL processor (backends/p_mysql.go) was customized and in server.go the check for empty sender was disabled.
+
+Modified by:
+
+* Eugene K <eugene.mastervip@gmail.com>
