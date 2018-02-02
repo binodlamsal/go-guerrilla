@@ -314,6 +314,29 @@ The following changes must be applied to the original configuration file in orde
 
 Please keep in mind that the default MySQL processor (backends/p_mysql.go) was customized and in server.go the check for empty sender was disabled.
 
-Modified by:
+#### To enable "Dumper" backend
+
+* Modify the config like this:
+
+```json
+...
+    "backend_config" :
+      {
+        "save_process": "Dumper|HeadersParser|Debugger|Hasher|Header|MySql",
+        "dumper_dir": "/tmp/guerrilla",
+        ...
+    }
+...
+```
+
+* Create "/tmp/guerrilla" (this is where all *.eml files will be saved)
+* Restart guerrillad
+
+
+#### Building & running
+
+See the original "Getting Started" section above
+
+#### Modified by:
 
 * Eugene K <eugene.mastervip@gmail.com>
