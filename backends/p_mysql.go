@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	netmail "net/mail"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -205,8 +204,8 @@ func MySql() Decorator {
 		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 			if task == TaskSaveMail {
 				var guid string
-				var bounce bool
-				var mid int
+				var bounce, afterBounce bool
+				var mid, seen int
 				var senttime time.Time
 
 				to := trimToLimit(strings.TrimSpace(e.RcptTo[0].String()), 255)
@@ -230,12 +229,12 @@ func MySql() Decorator {
 					return p.Process(e, task)
 				}
 
-				err = db.QueryRow("SELECT mid, senttime"+
+				err = db.QueryRow("SELECT mid, senttime, seen"+
 					" FROM "+m.config.MysqlGUIDLookupTable+
-					" WHERE guid=? AND seen=0", guid).Scan(&mid, &senttime)
+					" WHERE guid=?", guid).Scan(&mid, &senttime, &seen)
 
 				if err == sql.ErrNoRows {
-					Log().Infof("GUID %s not found or it was already seen", guid)
+					Log().Infof("GUID %s not found", guid)
 					return p.Process(e, task)
 				}
 
@@ -244,7 +243,37 @@ func MySql() Decorator {
 					return p.Process(e, task)
 				}
 
-				delay := calculateDelay(extractReceivedTimes([]byte(e.String())))
+				if seen == 1 {
+					wasBounce := 0
+
+					// check "bounce" flag with the matching GUID in "pings"
+					err = db.QueryRow("SELECT bounce"+
+						" FROM "+m.config.MysqlTable+
+						" WHERE guid=?", guid).Scan(&wasBounce)
+
+					// if nothing found then report this GUID as already seen
+					if err == sql.ErrNoRows {
+						Log().Infof("GUID %s is already seen", guid)
+						return p.Process(e, task)
+					}
+
+					if err != nil {
+						Log().WithError(err).Errorf("Failed to lookup GUID %s in %s table", guid, m.config.MysqlTable)
+						return p.Process(e, task)
+					}
+
+					// if this GUID was previously registered as a bounce and currently it's not
+					if wasBounce == 1 && bounce == false {
+						// mark this message to be stored under the same GUID but as a non-bounce this time
+						afterBounce = true
+					} else {
+						// otherwise report it as already seen
+						Log().Infof("GUID %s is already seen", guid)
+						return p.Process(e, task)
+					}
+				}
+
+				delay := calculateDelay([]byte(e.String()))
 				stmt, err := db.Prepare("UPDATE " + m.config.MysqlGUIDLookupTable + " SET seen=? WHERE guid=?")
 
 				if err != nil {
@@ -273,12 +302,22 @@ func MySql() Decorator {
 
 					// build the values for the query
 					vals = []interface{}{} // clear the vals
+
+					// do not store body of non-bounce messages
+					if bounce == false {
+						body = ""
+					}
+
 					vals = append(vals, nid, timeTaken, datetime, guid, body, header, receivedTime, bounce)
 					stmt := m.prepareInsertQuery(1, db)
 					err = m.doQuery(1, db, stmt, &vals)
 
 					if err != nil {
 						return NewResult(fmt.Sprint("554 Error: could not save email")), StorageError
+					}
+
+					if afterBounce {
+						Log().Infof("Message with GUID %s arrived after bounce - stored as a regular one", guid)
 					}
 				}
 
@@ -304,20 +343,6 @@ func MySql() Decorator {
 	}
 }
 
-type timestamps []time.Time
-
-func (p timestamps) Len() int {
-	return len(p)
-}
-
-func (p timestamps) Less(i, j int) bool {
-	return p[i].Before(p[j])
-}
-
-func (p timestamps) Swap(i, j int) {
-	p[i], p[j] = p[j], p[i]
-}
-
 func parseRFC1123ZTime(s string) (time.Time, error) {
 	m := regexp.MustCompile(`.*([A-Za-z_]{3}, \d+ [A-Za-z_]+ \d+ \d+:\d+:\d+ [-+]?\d+).*`).FindStringSubmatch(s)
 
@@ -328,7 +353,7 @@ func parseRFC1123ZTime(s string) (time.Time, error) {
 	return netmail.ParseDate(m[1])
 }
 
-func extractReceivedTimes(message []byte) (times timestamps) {
+func calculateDelay(message []byte) (delay int) {
 	msg, err := netmail.ReadMessage(bytes.NewReader(message))
 
 	if err != nil {
@@ -337,40 +362,23 @@ func extractReceivedTimes(message []byte) (times timestamps) {
 
 	rcvdHdrs, ok := msg.Header["Received"]
 
-	if !ok {
+	if !ok || len(rcvdHdrs) == 0 {
 		return
 	}
 
-	if len(rcvdHdrs) == 0 {
+	lastRcvdTime, err := parseRFC1123ZTime(rcvdHdrs[0])
+
+	if err != nil {
 		return
 	}
 
-	for _, r := range rcvdHdrs {
-		t, err := parseRFC1123ZTime(r)
+	sentTime, err := msg.Header.Date()
 
-		if err != nil {
-			continue
-		}
-
-		times = append(times, t)
-	}
-
-	return times
-}
-
-func calculateDelay(times timestamps) (delay int) {
-	if times == nil {
+	if err != nil {
 		return
 	}
 
-	if len(times) < 2 {
-		return
-	}
-
-	sort.Sort(times)
-	first := times[0]
-	last := times[len(times)-1]
-	return int(last.Sub(first).Seconds())
+	return int(lastRcvdTime.Sub(sentTime).Seconds())
 }
 
 func parseHeaderAndBody(message string) (header, body string, err error) {
