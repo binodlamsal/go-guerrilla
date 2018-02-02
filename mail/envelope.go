@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"gopkg.in/iconv.v1"
 	"io"
 	"io/ioutil"
 	"mime/quotedprintable"
@@ -17,9 +16,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"gopkg.in/iconv.v1"
 )
 
-const maxHeaderChunk = 1 + (3 << 10) // 3KB
+// increased to 30KB (was 3KB) to avoid "header not found" error in ParseHeaders()
+// when it deals with large e-mails
+const maxHeaderChunk = 1 + (30 << 10) // 30KB
 
 // Address encodes an email address of the form `<user@host>`
 type Address struct {
