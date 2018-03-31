@@ -146,6 +146,31 @@ func (g *MysqlProcessor) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *
 	return
 }
 
+func insertPing(db *sql.DB, table string, nid, timeTaken int, dateTime time.Time, guid, body, header string, receivedTime time.Time, bounce bool) error {
+	sql := "INSERT INTO " + table
+	sql += " (`nid`, `time_taken`, `datetime`, `guid`, `body`, `header`, `received_time`, `bounce`)"
+	sql += " VALUES (?, ?, ?, ?, ? , ?, ?, ?)"
+
+	_, err := db.Exec(sql, nid, timeTaken, dateTime, guid, body, header, receivedTime, bounce)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func updateLog(db *sql.DB, table string, seen int, guid string) error {
+	sql := "UPDATE " + table + " SET seen=? WHERE guid=?"
+	_, err := db.Exec(sql, seen, guid)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // for storing ip addresses in the ip_addr column
 func (g *MysqlProcessor) ip2bint(ip string) *big.Int {
 	bint := big.NewInt(0)
@@ -274,14 +299,7 @@ func MySql() Decorator {
 				}
 
 				delay := calculateDelay([]byte(e.String()))
-				stmt, err := db.Prepare("UPDATE " + m.config.MysqlGUIDLookupTable + " SET seen=? WHERE guid=?")
-
-				if err != nil {
-					Log().WithError(err).Error("Could not prepare update statement")
-					return p.Process(e, task)
-				}
-
-				_, err = stmt.Exec(1, guid)
+				err = updateLog(db, m.config.MysqlGUIDLookupTable, 1, guid)
 
 				if err != nil {
 					Log().WithError(err).Errorf("Could not update %s table", m.config.MysqlGUIDLookupTable)
@@ -308,9 +326,7 @@ func MySql() Decorator {
 						body = ""
 					}
 
-					vals = append(vals, nid, timeTaken, datetime, guid, body, header, receivedTime, bounce)
-					stmt := m.prepareInsertQuery(1, db)
-					err = m.doQuery(1, db, stmt, &vals)
+					err := insertPing(db, m.config.MysqlTable, nid, timeTaken, datetime, guid, body, header, receivedTime, bounce)
 
 					if err != nil {
 						return NewResult(fmt.Sprint("554 Error: could not save email")), StorageError
