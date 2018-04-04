@@ -146,12 +146,12 @@ func (g *MysqlProcessor) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *
 	return
 }
 
-func insertPing(db *sql.DB, table string, nid, timeTaken int, dateTime time.Time, guid, body, header string, receivedTime time.Time, bounce bool) error {
+func insertPing(db *sql.DB, table string, nid, timeTaken int, dateTime time.Time, guid, body, header string, bounce bool) error {
 	sql := "INSERT INTO " + table
 	sql += " (`nid`, `time_taken`, `datetime`, `guid`, `body`, `header`, `received_time`, `bounce`)"
-	sql += " VALUES (?, ?, ?, ?, ? , ?, ?, ?)"
+	sql += " VALUES (?, ?, ?, ?, ? , ?, NOW(), ?)"
 
-	_, err := db.Exec(sql, nid, timeTaken, dateTime, guid, body, header, receivedTime, bounce)
+	_, err := db.Exec(sql, nid, timeTaken, dateTime, guid, body, header, bounce)
 
 	if err != nil {
 		return err
@@ -316,7 +316,6 @@ func MySql() Decorator {
 					nid := mid
 					timeTaken := delay
 					datetime := senttime
-					receivedTime := time.Now()
 
 					// build the values for the query
 					vals = []interface{}{} // clear the vals
@@ -326,7 +325,7 @@ func MySql() Decorator {
 						body = ""
 					}
 
-					err := insertPing(db, m.config.MysqlTable, nid, timeTaken, datetime, guid, body, header, receivedTime, bounce)
+					err := insertPing(db, m.config.MysqlTable, nid, timeTaken, datetime, guid, body, header, bounce)
 
 					if err != nil {
 						return NewResult(fmt.Sprint("554 Error: could not save email")), StorageError
